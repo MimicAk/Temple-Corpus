@@ -5,6 +5,22 @@ from urllib.parse import urljoin
 from urllib.error import URLError
 from urllib.robotparser import RobotFileParser
 
+import mysql.connector
+from geopy.geocoders import Nominatim
+
+db_config = {
+    'host': 'localhost',
+    'user': 'root',
+    'password': '',
+    'database': 'temple_corpus'
+}
+
+# Connection and cursor settings
+connection = mysql.connector.connect(**db_config)
+
+cursor = connection.cursor()
+# end of connection settings
+
 my_list_web = []
 my_list = []
 list_p = []
@@ -23,7 +39,7 @@ def is_crawling_allowed(url):
         print(f"Error while fetching robots.txt(robots.txt file doesnot exist for this website)")
         return True
 
-def crawl(url, limit,li):
+def crawl(url, limit,li, deity_name):
     flag=0
     if limit <= 0:
         return
@@ -82,7 +98,17 @@ def crawl(url, limit,li):
                         print("Reference Links:", href)
                     flag = flag +1
                     
-
+    # Customized code by Ashok
+    # Data to MySQL
+    temple_name = soup.title.string.strip()
+    # deity_name
+    description = "\n".join(list_p)
+    image_url = list_img[5]
+    location = get_location()
+    # insert_temple_data(temple_name, deity_name, description, image_url, location, latitude, longitude, opening_hours,
+    #                   related_festival, ways_to_book, websites, phone_official_site, email_official_site):
+        
+        
 #getting google search results link
 def get_google_search_links(query):
     url = f"https://www.google.com/search?q={query}"
@@ -109,6 +135,7 @@ def get_google_search_links(query):
 
 # Start the crawler by providing a seed URL
 q = input("Enter Topic name: ")
+deity = input("Enter Deity name: ")
 links = get_google_search_links(q)
 for link in links[:3]:
     if link.startswith("ppp"):
@@ -118,4 +145,27 @@ for link in links[:3]:
         if result_web not in my_list_web:
             my_list_web.append(result_web)
             print("\nWebsite Url: ",link,"\n")
-            crawl(link, 1,link)
+            crawl(link, 1, link, deity)
+
+#________________________________________________________________________________________________________________________________ 
+# Insertion code for the db connection   
+def insert_temple_data(temple_name, deity_name, description, image_url, location, latitude, longitude, opening_hours,
+                      related_festival, ways_to_book, websites, phone_official_site, email_official_site):
+    sql = """
+    INSERT INTO temples (
+        temple_name, deity_name, description, image_url, location, latitude, longitude, OpeningHours,
+        related_festival, ways_to_book, websites, phone_official_site, email_official_site
+    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    """
+    values = (
+        temple_name, deity_name, description, image_url, location, latitude, longitude, opening_hours,
+        related_festival, ways_to_book, websites, phone_official_site, email_official_site
+    )
+    cursor.execute(sql, values)
+    connection.commit()
+# ________________________________________________________________________________________________________________________________
+
+# Location getter functions
+# Yet to be implemented? I'm working on it!
+def get_location():
+    geolocator = Nominatim(user_agent="my_geocoder")
