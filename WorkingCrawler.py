@@ -6,7 +6,7 @@ from urllib.error import URLError
 from urllib.robotparser import RobotFileParser
 
 import mysql.connector
-from geopy.geocoders import Nominatim
+from geopy.geocoders import MapQuest
 
 db_config = {
     'host': 'localhost',
@@ -168,4 +168,7 @@ def insert_temple_data(temple_name, deity_name, description, image_url, location
 # Location getter functions
 # Yet to be implemented? I'm working on it!
 def get_location():
-    geolocator = Nominatim(user_agent="my_geocoder")
+    geolocator = MapQuest(api_key="")
+    location = geolocator.geocode(address)
+    if location:
+        return location
