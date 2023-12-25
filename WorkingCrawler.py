@@ -6,7 +6,7 @@ from urllib.error import URLError
 from urllib.robotparser import RobotFileParser
 
 import mysql.connector
-from geopy.geocoders import MapQuest
+from geopy.geocoders import Nominatim
 
 db_config = {
     'host': 'localhost',
@@ -26,7 +26,8 @@ my_list = []
 list_p = []
 list_img = []
 json_data1 = []
-i=0
+i = 0
+
 
 def is_crawling_allowed(url):
     try:
@@ -39,13 +40,14 @@ def is_crawling_allowed(url):
         print(f"Error while fetching robots.txt(robots.txt file doesnot exist for this website)")
         return True
 
-def crawl(url, limit,li, deity_name):
-    flag=0
+
+def crawl(url, limit, li, deity_name, address, festival):
+    flag = 0
     if limit <= 0:
         return
     if not is_crawling_allowed(url):
-            print(f"Crawling not allowed for {url}")
-            return
+        print(f"Crawling not allowed for {url}")
+        return
 
     # Send a GET request to the specified URL
     response = requests.get(url)
@@ -55,7 +57,7 @@ def crawl(url, limit,li, deity_name):
 
     # Extract relevant information or perform desired actions
     # For example, you could print the page title
-    #print("Title:", soup.title.string)
+    # print("Title:", soup.title.string)
 
     # Extract and print all the text content within the <p> tags
     paragraphs = soup.find_all('p')
@@ -67,7 +69,7 @@ def crawl(url, limit,li, deity_name):
         match = re.search(pattern, cleaned_text)
         if match:
             continue
-        else:  
+        else:
             if cleaned_text not in list_p:
                 list_p.append(cleaned_text)
                 print(cleaned_text)
@@ -78,7 +80,7 @@ def crawl(url, limit,li, deity_name):
         src = image.get('src')
         if src not in list_img:
             list_img.append(src)
-            print("Image URL: ",src)
+            print("Image URL: ", src)
 
     # Find all the links on the page
     links = soup.find_all('a')
@@ -86,39 +88,50 @@ def crawl(url, limit,li, deity_name):
     # Process each link
     for link in links:
         href = link.get('href')
-        
+
         # Check if the link is not None
         if href is not None:
             # Construct the absolute URL
             if href.startswith('https://'):
                 if href not in my_list:
                     my_list.append(href)
-                    crawl(href, limit - 1,li)
-                    if flag%6 == 0:
+                    crawl(href, limit - 1, li)
+                    if flag % 6 == 0:
                         print("Reference Links:", href)
-                    flag = flag +1
-                    
+                    flag = flag + 1
+
     # Customized code by Ashok
     # Data to MySQL
     temple_name = soup.title.string.strip()
     # deity_name
     description = "\n".join(list_p)
     image_url = list_img[5]
-    location = get_location()
-    # insert_temple_data(temple_name, deity_name, description, image_url, location, latitude, longitude, opening_hours,
-    #                   related_festival, ways_to_book, websites, phone_official_site, email_official_site):
-        
-        
-#getting google search results link
+    locationResults = get_location_details(address)
+    location = locationResults['formatted_address'] if locationResults and locationResults['formatted_address'] else "Empty address"
+    latitude = locationResults['latitude'] if locationResults and locationResults['latitude'] else "Empty Latitude"
+    longitude = locationResults['longitude'] if locationResults and locationResults['longitude'] else "Empty Longitude"
+    opening_hours = locationResults['opening_hours'] if locationResults and locationResults['opening_hours'] else "Empty Hours"
+    phone_official_site = locationResults['phone_number'] if locationResults and locationResults['phone_number'] else "Empty Phone"
+    email_official_site = locationResults['email'] if locationResults and locationResults['email'] else "Empty Email"
+    related_festival = festival
+    ways_to_book = 'To Be Implemented'
+    websites = li
+    insert_temple_data(temple_name, deity_name, description, image_url, location, latitude, longitude, opening_hours,
+                      related_festival, ways_to_book, websites, phone_official_site, email_official_site)
+
+
+# getting google search results link
 def get_google_search_links(query):
     url = f"https://www.google.com/search?q={query}"
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
 
     response = requests.get(url, headers=headers)
 
     if response.status_code == 200:
         soup = BeautifulSoup(response.text, 'html.parser')
-        result_divs = soup.find_all('div', class_='tF2Cxc')  # Adjust the class based on the current structure
+        # Adjust the class based on the current structure
+        result_divs = soup.find_all('div', class_='tF2Cxc')
 
         links = []
         for result_div in result_divs:
@@ -133,9 +146,12 @@ def get_google_search_links(query):
         print(f"Failed to fetch {url}. Status code: {response.status_code}")
         return []
 
+
 # Start the crawler by providing a seed URL
 q = input("Enter Topic name: ")
 deity = input("Enter Deity name: ")
+address = input("Enter Address: ")
+festival = input("Enter Festival: ")
 links = get_google_search_links(q)
 for link in links[:3]:
     if link.startswith("ppp"):
@@ -144,13 +160,15 @@ for link in links[:3]:
         result_web = link
         if result_web not in my_list_web:
             my_list_web.append(result_web)
-            print("\nWebsite Url: ",link,"\n")
-            crawl(link, 1, link, deity)
+            print("\nWebsite Url: ", link, "\n")
+            crawl(link, 1, link, deity, address, festival)
 
-#________________________________________________________________________________________________________________________________ 
-# Insertion code for the db connection   
+# ________________________________________________________________________________________________________________________________
+# Insertion code for the db connection
+
+
 def insert_temple_data(temple_name, deity_name, description, image_url, location, latitude, longitude, opening_hours,
-                      related_festival, ways_to_book, websites, phone_official_site, email_official_site):
+                       related_festival, ways_to_book, websites, phone_official_site, email_official_site):
     sql = """
     INSERT INTO temples (
         temple_name, deity_name, description, image_url, location, latitude, longitude, OpeningHours,
@@ -166,9 +184,64 @@ def insert_temple_data(temple_name, deity_name, description, image_url, location
 # ________________________________________________________________________________________________________________________________
 
 # Location getter functions
-# Yet to be implemented? I'm working on it!
-def get_location():
-    geolocator = MapQuest(api_key="")
-    location = geolocator.geocode(address)
-    if location:
-        return location
+# Yet to be implemented? I'm using my API_KEY!
+
+
+def get_location_details(address):
+    base_url = "https://maps.googleapis.com/maps/api/geocode/json"
+    places_base_url = "https://maps.googleapis.com/maps/api/place/details/json"
+    api_key = "AIzaSyDVVrTpVbd6OBebEdy6kE_V0RyQIPqDBhI"
+    # Step 1: Get coordinates (latitude and longitude) using Geocoding API
+    params = {'address': address, 'key': api_key}
+    response = requests.get(base_url, params=params)
+
+    if response.status_code == 200:
+        data = response.json()
+
+        # Check if the Geocoding API request was successful
+        if data.get('status') == 'OK':
+            result = data['results'][0]
+
+            # Extract latitude, longitude, and address from the results
+            location = result['geometry']['location']
+            latitude = location['lat']
+            longitude = location['lng']
+            formatted_address = result['formatted_address']
+
+            # Step 2: Get place details using Places API
+            places_params = {
+                'place_id': result['place_id'],
+                'key': api_key,
+                'fields': 'name,formatted_address,formatted_phone_number,international_phone_number,website,email,opening_hours'
+            }
+
+            # Send a GET request to the Google Places API
+            places_response = requests.get(places_base_url, params=places_params)
+            places_data = places_response.json()
+
+            # Check if the Places API request was successful
+            if places_response.status_code == 200 and places_data.get('status') == 'OK':
+                result = places_data.get('result', {})
+                phone_number = result.get('formatted_phone_number', 'Phone number not available')
+                international_phone_number = result.get('international_phone_number', 'International phone number not available')
+                website = result.get('website', 'Website not available')
+                email = result.get('email', 'Email not available')
+                opening_hours = result.get('opening_hours', {}).get('weekday_text', 'Opening hours not available')
+
+                return {
+                    'formatted_address': formatted_address,
+                    'latitude': latitude,
+                    'longitude': longitude,
+                    'opening_hours': opening_hours,
+                    'phone_number': phone_number,
+                    'international_phone_number': international_phone_number,
+                    'website': website,
+                    'email': email
+                }
+            else:
+                print("Error: Unable to fetch details from Google Places API.")
+    else:
+        print(f"Error: Unable to fetch data from Geocoding API. Status Code: {response.status_code}")
+
+    return None
+    
