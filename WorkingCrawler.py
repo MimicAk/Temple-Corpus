@@ -28,6 +28,89 @@ list_img = []
 json_data1 = []
 i = 0
 
+# ________________________________________________________________________________________________________________________________
+# Insertion code for the db connection
+
+
+def insert_temple_data(temple_name, deity_name, description, image_url, location, latitude, longitude, opening_hours,
+                       related_festival, ways_to_book, websites, phone_official_site, email_official_site):
+    sql = """
+    INSERT INTO temples (
+        temple_name, deity_name, description, image_url, location, latitude, longitude, OpeningHours,
+        related_festival, ways_to_book, websites, phone_official_site, email_official_site
+    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    """
+    values = (
+        temple_name, deity_name, description, image_url, location, latitude, longitude, opening_hours,
+        related_festival, ways_to_book, websites, phone_official_site, email_official_site
+    )
+    cursor.execute(sql, values)
+    connection.commit()
+    
+# ________________________________________________________________________________________________________________________________
+
+# Location getter functions
+# Yet to be implemented? I'm using my API_KEY!
+
+
+def get_location_details(address):
+    base_url = "https://maps.googleapis.com/maps/api/geocode/json"
+    places_base_url = "https://maps.googleapis.com/maps/api/place/details/json"
+    api_key = "AIzaSyDVVrTpVbd6OBebEdy6kE_V0RyQIPqDBhI"
+    # Step 1: Get coordinates (latitude and longitude) using Geocoding API
+    params = {'address': address, 'key': api_key}
+    response = requests.get(base_url, params=params)
+
+    if response.status_code == 200:
+        data = response.json()
+
+        # Check if the Geocoding API request was successful
+        if data.get('status') == 'OK':
+            result = data['results'][0]
+
+            # Extract latitude, longitude, and address from the results
+            location = result['geometry']['location']
+            latitude = location['lat']
+            longitude = location['lng']
+            formatted_address = result['formatted_address']
+
+            # Step 2: Get place details using Places API
+            places_params = {
+                'place_id': result['place_id'],
+                'key': api_key,
+                'fields': 'name'
+            }
+
+            # Send a GET request to the Google Places API
+            places_response = requests.get(places_base_url, params=places_params)
+            places_data = places_response.json()
+
+            # Check if the Places API request was successful
+            if places_response.status_code == 200 and places_data.get('status') == 'OK':
+                result = places_data.get('result', {})
+                phone_number = result.get('formatted_phone_number', 'Phone number not available')
+                international_phone_number = result.get('international_phone_number', 'International phone number not available')
+                website = result.get('website', 'Website not available')
+                email = result.get('email', 'Email not available')
+                opening_hours = result.get('opening_hours', {}).get('weekday_text', 'Opening hours not available')
+
+                return {
+                    'formatted_address': formatted_address,
+                    'latitude': latitude,
+                    'longitude': longitude,
+                    'opening_hours': opening_hours,
+                    'phone_number': phone_number,
+                    'international_phone_number': international_phone_number,
+                    'website': website,
+                    'email': email
+                }
+            else:
+                print("Error: Unable to fetch details from Google Places API.")
+    else:
+        print(f"Error: Unable to fetch data from Geocoding API. Status Code: {response.status_code}")
+
+    return None
+    
 
 def is_crawling_allowed(url):
     try:
@@ -95,7 +178,7 @@ def crawl(url, limit, li, deity_name, address, festival):
             if href.startswith('https://'):
                 if href not in my_list:
                     my_list.append(href)
-                    crawl(href, limit - 1, li)
+                    crawl(href, limit - 1, li, deity_name, address, festival)
                     if flag % 6 == 0:
                         print("Reference Links:", href)
                     flag = flag + 1
@@ -162,86 +245,3 @@ for link in links[:3]:
             my_list_web.append(result_web)
             print("\nWebsite Url: ", link, "\n")
             crawl(link, 1, link, deity, address, festival)
-
-# ________________________________________________________________________________________________________________________________
-# Insertion code for the db connection
-
-
-def insert_temple_data(temple_name, deity_name, description, image_url, location, latitude, longitude, opening_hours,
-                       related_festival, ways_to_book, websites, phone_official_site, email_official_site):
-    sql = """
-    INSERT INTO temples (
-        temple_name, deity_name, description, image_url, location, latitude, longitude, OpeningHours,
-        related_festival, ways_to_book, websites, phone_official_site, email_official_site
-    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-    """
-    values = (
-        temple_name, deity_name, description, image_url, location, latitude, longitude, opening_hours,
-        related_festival, ways_to_book, websites, phone_official_site, email_official_site
-    )
-    cursor.execute(sql, values)
-    connection.commit()
-# ________________________________________________________________________________________________________________________________
-
-# Location getter functions
-# Yet to be implemented? I'm using my API_KEY!
-
-
-def get_location_details(address):
-    base_url = "https://maps.googleapis.com/maps/api/geocode/json"
-    places_base_url = "https://maps.googleapis.com/maps/api/place/details/json"
-    api_key = "AIzaSyDVVrTpVbd6OBebEdy6kE_V0RyQIPqDBhI"
-    # Step 1: Get coordinates (latitude and longitude) using Geocoding API
-    params = {'address': address, 'key': api_key}
-    response = requests.get(base_url, params=params)
-
-    if response.status_code == 200:
-        data = response.json()
-
-        # Check if the Geocoding API request was successful
-        if data.get('status') == 'OK':
-            result = data['results'][0]
-
-            # Extract latitude, longitude, and address from the results
-            location = result['geometry']['location']
-            latitude = location['lat']
-            longitude = location['lng']
-            formatted_address = result['formatted_address']
-
-            # Step 2: Get place details using Places API
-            places_params = {
-                'place_id': result['place_id'],
-                'key': api_key,
-                'fields': 'name,formatted_address,formatted_phone_number,international_phone_number,website,email,opening_hours'
-            }
-
-            # Send a GET request to the Google Places API
-            places_response = requests.get(places_base_url, params=places_params)
-            places_data = places_response.json()
-
-            # Check if the Places API request was successful
-            if places_response.status_code == 200 and places_data.get('status') == 'OK':
-                result = places_data.get('result', {})
-                phone_number = result.get('formatted_phone_number', 'Phone number not available')
-                international_phone_number = result.get('international_phone_number', 'International phone number not available')
-                website = result.get('website', 'Website not available')
-                email = result.get('email', 'Email not available')
-                opening_hours = result.get('opening_hours', {}).get('weekday_text', 'Opening hours not available')
-
-                return {
-                    'formatted_address': formatted_address,
-                    'latitude': latitude,
-                    'longitude': longitude,
-                    'opening_hours': opening_hours,
-                    'phone_number': phone_number,
-                    'international_phone_number': international_phone_number,
-                    'website': website,
-                    'email': email
-                }
-            else:
-                print("Error: Unable to fetch details from Google Places API.")
-    else:
-        print(f"Error: Unable to fetch data from Geocoding API. Status Code: {response.status_code}")
-
-    return None
-    
