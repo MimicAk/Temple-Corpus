@@ -124,7 +124,7 @@ def is_crawling_allowed(url):
         return True
 
 
-def crawl(url, limit, li, deity_name, address, festival):
+def crawl(url, limit, li, deity_name, address, festival, temple_name):
     flag = 0
     if limit <= 0:
         return
@@ -178,14 +178,14 @@ def crawl(url, limit, li, deity_name, address, festival):
             if href.startswith('https://'):
                 if href not in my_list:
                     my_list.append(href)
-                    crawl(href, limit - 1, li, deity_name, address, festival)
+                    crawl(href, limit - 1, li, deity_name, address, festival, temple_name)
                     if flag % 6 == 0:
                         print("Reference Links:", href)
                     flag = flag + 1
 
     # Customized code by Ashok
     # Data to MySQL
-    temple_name = soup.title.string.strip()
+    temple_name = temple_name
     # deity_name
     description = "\n".join(list_p)
     image_url = list_img[5]
@@ -244,4 +244,4 @@ for link in links[:3]:
         if result_web not in my_list_web:
             my_list_web.append(result_web)
             print("\nWebsite Url: ", link, "\n")
-            crawl(link, 1, link, deity, address, festival)
+            crawl(link, 1, link, deity, address, festival, q)
