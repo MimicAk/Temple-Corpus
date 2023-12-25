@@ -34,19 +34,28 @@ i = 0
 
 def insert_temple_data(temple_name, deity_name, description, image_url, location, latitude, longitude, opening_hours,
                        related_festival, ways_to_book, websites, phone_official_site, email_official_site):
-    sql = """
-    INSERT INTO temples (
-        temple_name, deity_name, description, image_url, location, latitude, longitude, OpeningHours,
-        related_festival, ways_to_book, websites, phone_official_site, email_official_site
-    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-    """
-    values = (
-        temple_name, deity_name, description, image_url, location, latitude, longitude, opening_hours,
-        related_festival, ways_to_book, websites, phone_official_site, email_official_site
-    )
-    cursor.execute(sql, values)
-    connection.commit()
-    
+    # Check if the record already exists
+    check_sql = "SELECT COUNT(*) FROM temples WHERE temple_name = %s"
+    cursor.execute(check_sql, (temple_name,))
+    count = cursor.fetchone()[0]
+
+    if count == 0:
+        # Record does not exist, perform the insertion
+        sql = """
+        INSERT INTO temples (
+            temple_name, deity_name, description, image_url, location, latitude, longitude, OpeningHours,
+            related_festival, ways_to_book, websites, phone_official_site, email_official_site
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """
+        values = (
+            temple_name, deity_name, description, image_url, location, latitude, longitude, opening_hours,
+            related_festival, ways_to_book, websites, phone_official_site, email_official_site
+        )
+        cursor.execute(sql, values)
+        connection.commit()
+    else:
+        print(f"Record for {temple_name} already exists. Skipping insertion.")
+
 # ________________________________________________________________________________________________________________________________
 
 # Location getter functions
@@ -78,39 +87,63 @@ def get_location_details(address):
             places_params = {
                 'place_id': result['place_id'],
                 'key': api_key,
-                'fields': 'name'
+                'fields': 'name,formatted_phone_number,international_phone_number,website,opening_hours'
             }
 
             # Send a GET request to the Google Places API
-            places_response = requests.get(places_base_url, params=places_params)
+            places_response = requests.get(
+                places_base_url, params=places_params)
             places_data = places_response.json()
 
             # Check if the Places API request was successful
             if places_response.status_code == 200 and places_data.get('status') == 'OK':
                 result = places_data.get('result', {})
-                phone_number = result.get('formatted_phone_number', 'Phone number not available')
-                international_phone_number = result.get('international_phone_number', 'International phone number not available')
+                phone_number = result.get(
+                    'formatted_phone_number', 'Phone number not available')
+                international_phone_number = result.get(
+                    'international_phone_number', 'International phone number not available')
                 website = result.get('website', 'Website not available')
                 email = result.get('email', 'Email not available')
-                opening_hours = result.get('opening_hours', {}).get('weekday_text', 'Opening hours not available')
+                opening_hours_info = result.get('opening_hours', {})
+                if opening_hours_info and 'periods' in opening_hours_info:
+                    # Extract opening hours from periods if available
+                    periods = opening_hours_info['periods']
+                    opening_hours = []
 
+                    for period in periods:
+                        day = period['open']['day']
+                        open_time = period['open']['time']
+                        close_time = period['close']['time']
+
+                        day_name = [
+                            'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
+                        ][day]
+
+                        hours = f"{day_name}\n{open_time}–{close_time}"
+
+                        opening_hours.append(hours)
+
+                    opening_hours = '\n\n'.join(opening_hours)
+                else:
+                    opening_hours = 'Opening hours not available'
+                    
                 return {
                     'formatted_address': formatted_address,
                     'latitude': latitude,
                     'longitude': longitude,
                     'opening_hours': opening_hours,
-                    'phone_number': phone_number,
-                    'international_phone_number': international_phone_number,
+                    'phone_number': phone_number +' ,'+international_phone_number,
                     'website': website,
                     'email': email
                 }
             else:
                 print("Error: Unable to fetch details from Google Places API.")
     else:
-        print(f"Error: Unable to fetch data from Geocoding API. Status Code: {response.status_code}")
+        print(
+            f"Error: Unable to fetch data from Geocoding API. Status Code: {response.status_code}")
 
     return None
-    
+
 
 def is_crawling_allowed(url):
     try:
@@ -178,7 +211,8 @@ def crawl(url, limit, li, deity_name, address, festival, temple_name):
             if href.startswith('https://'):
                 if href not in my_list:
                     my_list.append(href)
-                    crawl(href, limit - 1, li, deity_name, address, festival, temple_name)
+                    crawl(href, limit - 1, li, deity_name,
+                          address, festival, temple_name)
                     if flag % 6 == 0:
                         print("Reference Links:", href)
                     flag = flag + 1
@@ -189,7 +223,7 @@ def crawl(url, limit, li, deity_name, address, festival, temple_name):
     # deity_name
     description = "\n".join(list_p)
     image_url = list_img[5]
-    locationResults = get_location_details(address)
+    locationResults = get_location_details(temple_name+' '+address)
     location = locationResults['formatted_address'] if locationResults and locationResults['formatted_address'] else "Empty address"
     latitude = locationResults['latitude'] if locationResults and locationResults['latitude'] else "Empty Latitude"
     longitude = locationResults['longitude'] if locationResults and locationResults['longitude'] else "Empty Longitude"
@@ -199,8 +233,9 @@ def crawl(url, limit, li, deity_name, address, festival, temple_name):
     related_festival = festival
     ways_to_book = 'To Be Implemented'
     websites = li
+
     insert_temple_data(temple_name, deity_name, description, image_url, location, latitude, longitude, opening_hours,
-                      related_festival, ways_to_book, websites, phone_official_site, email_official_site)
+                       related_festival, ways_to_book, websites, phone_official_site, email_official_site)
 
 
 # getting google search results link
